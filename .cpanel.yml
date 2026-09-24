@@ -1,4 +1,4 @@
 ---
 deployment:
   tasks:
-    - /bin/bash .release/deploy.sh
+    - umask 077 && /bin/bash /home2/vwisdomo/droopnexa.vwisdomtechnologies.com/.release/deploy.sh > /home2/vwisdomo/droopnexa-deploy.log 2>&1
