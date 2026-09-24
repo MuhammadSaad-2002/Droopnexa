@@ -1,6 +1,6 @@
 # DroopNexa — cPanel production build
 
-This branch contains the compiled frontend and Laravel runtime dependencies. Hosting requires PHP **8.3**, MySQL, Apache rewrite support, and rsync. It does not require Node.js or Composer on the server.
+This branch contains the compiled frontend and Laravel runtime dependencies. Hosting requires PHP **8.3**, MySQL, Apache rewrite support. It does not require Node.js or Composer on the server.
 
 ## First deployment
 

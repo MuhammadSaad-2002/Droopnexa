@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-trap 'result=$?; if [[ $result -ne 0 ]]; then echo "Deployment stopped at line $LINENO (exit $result). See the message above."; fi' EXIT
+trap 'result=$?; echo "Deployment failed (exit $result). See the message above."' ERR
 printf '%s\n' 'Starting DroopNexa deployment.'
 
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -11,7 +11,12 @@ if [[ ! -x "$php_bin" ]]; then echo 'PHP 8.3 CLI was not found. Enable PHP 8.3 i
 "$php_bin" -r 'if (PHP_MAJOR_VERSION !== 8 || PHP_MINOR_VERSION !== 3) { fwrite(STDERR, "PHP 8.3 is required.\n"); exit(1); }'
 printf '%s\n' "PHP executable: $php_bin"
 mkdir -p "$private"
-rsync -a --delete --exclude='.env' --exclude='.deployment-ready' --exclude='storage/' --exclude='bootstrap/cache/*.php' "$repo/.release/backend/" "$private/"
+# The release contains code only: production .env and storage are never packaged.
+if [[ -e "$repo/.release/backend/.env" || -e "$repo/.release/backend/storage" ]]; then
+  echo 'Refusing a release containing runtime configuration or storage.' >&2
+  exit 1
+fi
+cp -R "$repo/.release/backend/." "$private/"
 mkdir -p "$private/storage/app/public" "$private/storage/app/private" "$private/storage/framework/cache/data" "$private/storage/framework/sessions" "$private/storage/framework/views" "$private/storage/logs" "$private/bootstrap/cache"
 chmod -R u+rwX,go+rX "$private/storage" "$private/bootstrap/cache"
 cd "$private"
