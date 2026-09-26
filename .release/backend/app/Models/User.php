@@ -96,7 +96,7 @@ class User extends Authenticatable
             'view_wallet' => $isStaff,
             'view_profile' => $isStaff,
             'manage_products' => $isAdmin,
-            'manage_withdrawals' => $isAdmin,
+            'manage_withdrawals' => $isStaff,
             'manage_settings' => $isAdmin,
         ];
     }

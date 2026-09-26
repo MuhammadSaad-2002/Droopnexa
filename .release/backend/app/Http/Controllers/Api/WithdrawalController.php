@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Order;
 use App\Models\User;
+use App\Models\Wallet;
 use App\Models\WithdrawalRequest;
 use App\Services\WalletService;
 use Illuminate\Http\JsonResponse;
@@ -28,23 +29,23 @@ class WithdrawalController extends Controller
         $customer = $request->user();
         $this->ensureCustomer($customer);
         $data = $request->validate([
-            'amount' => ['required', 'numeric', 'min:0.01'],
+            'amount' => ['required', 'numeric', 'decimal:0,2', 'min:0.01', 'max:9999999999.99'],
             'payment_details' => ['required', 'string', 'max:4000'],
             'customer_note' => ['nullable', 'string', 'max:2000'],
         ]);
 
         $withdrawal = DB::transaction(function () use ($customer, $data) {
+            $wallet = $customer->wallet()->lockForUpdate()->firstOrCreate([], ['cached_balance' => 0]);
             $completedOrders = Order::query()->where('customer_id', $customer->id)->where('status', 'completed')->count();
             abort_unless($completedOrders >= config('droopnexa.minimum_completed_orders_for_wallet_redemption', 3), 422, 'Complete more orders before requesting a withdrawal.');
 
-            $wallet = $customer->wallet()->lockForUpdate()->firstOrCreate([], ['cached_balance' => 0]);
             $reservedAmount = WithdrawalRequest::query()
                 ->where('customer_id', $customer->id)
                 ->whereIn('status', ['pending', 'under_review', 'approved'])
-                ->sum('amount');
+                ->lockForUpdate()->get()->sum('amount');
             $requestedAmount = (float) $data['amount'];
 
-            abort_if((float) $wallet->cached_balance - (float) $reservedAmount < $requestedAmount, 422, 'The requested amount is greater than the available wallet balance.');
+            abort_if((int) round((float) $wallet->cached_balance * 100) - (int) round((float) $reservedAmount * 100) < (int) round($requestedAmount * 100), 422, 'The requested amount is greater than the available wallet balance.');
 
             return WithdrawalRequest::create([
                 'reference' => 'WDR-'.strtoupper(Str::random(8)),
@@ -61,6 +62,7 @@ class WithdrawalController extends Controller
 
     public function show(Request $request, WithdrawalRequest $withdrawalRequest): JsonResponse
     {
+        $this->ensureCustomer($request->user());
         abort_unless($withdrawalRequest->customer_id === $request->user()->id, 404);
 
         return response()->json(['data' => $withdrawalRequest->load('walletTransaction')]);
@@ -68,51 +70,71 @@ class WithdrawalController extends Controller
 
     public function staffIndex(Request $request): JsonResponse
     {
-        $this->ensureAdmin($request->user());
+        $this->ensureStaff($request->user());
 
         return response()->json([
             'data' => WithdrawalRequest::query()
-                ->with(['customer:id,name,email', 'customer.wallet:id,customer_id,cached_balance', 'reviewedBy:id,name', 'processedBy:id,name', 'walletTransaction:id,withdrawal_request_id,reference'])
+                ->with(['customer' => fn ($query) => $query->select('id', 'name', 'email')->withCount(['orders as completed_orders_count' => fn ($orders) => $orders->where('status', 'completed')]), 'customer.wallet:id,customer_id,cached_balance', 'reviewedBy:id,name', 'processedBy:id,name', 'walletTransaction:id,withdrawal_request_id,reference'])
                 ->latest()
                 ->get(),
         ]);
     }
 
+    public function review(Request $request, WithdrawalRequest $withdrawalRequest): JsonResponse
+    {
+        $this->ensureStaff($request->user());
+
+        return $this->transition($request, $withdrawalRequest, 'under_review', ['pending']);
+    }
+
     public function approve(Request $request, WithdrawalRequest $withdrawalRequest): JsonResponse
     {
-        $this->ensureAdmin($request->user());
-        abort_unless(in_array($withdrawalRequest->status, ['pending', 'under_review'], true), 422, 'This withdrawal cannot be approved in its current status.');
+        $this->ensureStaff($request->user());
 
-        $withdrawalRequest->update([
-            'status' => 'approved',
-            'admin_note' => $request->validate(['admin_note' => ['nullable', 'string', 'max:2000']])['admin_note'] ?? $withdrawalRequest->admin_note,
-            'reviewed_by' => $request->user()->id,
-            'reviewed_at' => now(),
-        ]);
-
-        return response()->json(['data' => $withdrawalRequest->fresh(['customer:id,name,email', 'reviewedBy:id,name'])]);
+        return $this->transition($request, $withdrawalRequest, 'approved', ['pending', 'under_review']);
     }
 
     public function reject(Request $request, WithdrawalRequest $withdrawalRequest): JsonResponse
     {
-        $this->ensureAdmin($request->user());
-        abort_unless(in_array($withdrawalRequest->status, ['pending', 'under_review', 'approved'], true), 422, 'This withdrawal cannot be rejected in its current status.');
-        $data = $request->validate(['admin_note' => ['required', 'string', 'max:2000']]);
+        $this->ensureStaff($request->user());
 
-        $withdrawalRequest->update([
-            'status' => 'rejected',
-            'admin_note' => $data['admin_note'],
-            'reviewed_by' => $request->user()->id,
-            'reviewed_at' => now(),
+        return $this->transition($request, $withdrawalRequest, 'rejected', ['pending', 'under_review', 'approved']);
+    }
+
+    public function cancel(Request $request, WithdrawalRequest $withdrawalRequest): JsonResponse
+    {
+        $this->ensureCustomer($request->user());
+        abort_unless($withdrawalRequest->customer_id === $request->user()->id, 404);
+
+        return $this->transition($request, $withdrawalRequest, 'cancelled', ['pending', 'under_review']);
+    }
+
+    private function transition(Request $request, WithdrawalRequest $withdrawal, string $status, array $allowed): JsonResponse
+    {
+        $data = $status === 'cancelled' ? [] : $request->validate([
+            'admin_note' => [$status === 'rejected' ? 'required' : 'nullable', 'string', 'max:2000'],
         ]);
+        $updated = DB::transaction(function () use ($request, $withdrawal, $status, $allowed, $data) {
+            Wallet::query()->where('customer_id', $withdrawal->customer_id)->lockForUpdate()->firstOrFail();
+            $locked = WithdrawalRequest::query()->lockForUpdate()->findOrFail($withdrawal->id);
+            abort_unless(in_array($locked->status, $allowed, true), 422, 'This withdrawal has changed or cannot be updated in its current status.');
+            $changes = ['status' => $status];
+            if ($status !== 'cancelled') {
+                $changes += ['admin_note' => $data['admin_note'] ?? $locked->admin_note, 'reviewed_by' => $request->user()->id, 'reviewed_at' => now()];
+            }
+            $locked->update($changes);
 
-        return response()->json(['data' => $withdrawalRequest->fresh(['customer:id,name,email', 'reviewedBy:id,name'])]);
+            return $locked->fresh();
+        }, 3);
+
+        return response()->json(['data' => $updated]);
     }
 
     public function process(Request $request, WithdrawalRequest $withdrawalRequest, WalletService $walletService): JsonResponse
     {
-        $this->ensureAdmin($request->user());
-        $transaction = $walletService->processWithdrawal($withdrawalRequest, $request->user());
+        $this->ensureStaff($request->user());
+        $data = $request->validate(['payout_confirmed' => ['required', 'accepted'], 'admin_note' => ['required', 'string', 'max:2000']]);
+        $transaction = $walletService->processWithdrawal($withdrawalRequest, $request->user(), $data['admin_note']);
 
         return response()->json(['data' => $transaction], 201);
     }
@@ -122,8 +144,8 @@ class WithdrawalController extends Controller
         abort_unless($user->role === 'customer', 403, 'Customer access is required.');
     }
 
-    private function ensureAdmin(User $user): void
+    private function ensureStaff(User $user): void
     {
-        abort_unless($user->isAdmin(), 403, 'Admin access is required.');
+        abort_unless($user->hasStaffPermission('manage_withdrawals'), 403, 'Staff withdrawal access is required.');
     }
 }

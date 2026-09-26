@@ -1,1 +1,0 @@
-import{j as s}from"./index-DRs6Q2dw.js";function m({src:i,fill:n,priority:t,unoptimized:u,quality:g,style:e,alt:a="",loading:r,...o}){return s.jsx("img",{...o,alt:a,src:typeof i=="string"?i:i.src,loading:t?"eager":r??"lazy",fetchPriority:t?"high":o.fetchPriority,style:n?{position:"absolute",inset:0,width:"100%",height:"100%",...e}:e})}export{m as I};

@@ -54,9 +54,10 @@ class WalletService
         });
     }
 
-    public function processWithdrawal(WithdrawalRequest $withdrawal, User $actor): WalletTransaction
+    public function processWithdrawal(WithdrawalRequest $withdrawal, User $actor, string $payoutNote): WalletTransaction
     {
-        return DB::transaction(function () use ($withdrawal, $actor) {
+        return DB::transaction(function () use ($withdrawal, $actor, $payoutNote) {
+            $wallet = Wallet::query()->where('customer_id', $withdrawal->customer_id)->lockForUpdate()->firstOrFail();
             $lockedWithdrawal = WithdrawalRequest::query()->lockForUpdate()->findOrFail($withdrawal->id);
 
             if ($lockedWithdrawal->status !== 'approved') {
@@ -67,7 +68,6 @@ class WalletService
                 throw ValidationException::withMessages(['withdrawal' => ['This withdrawal has already been paid.']]);
             }
 
-            $wallet = Wallet::query()->where('customer_id', $lockedWithdrawal->customer_id)->lockForUpdate()->firstOrFail();
             $numericAmount = (float) $lockedWithdrawal->amount;
 
             if ((float) $wallet->cached_balance < $numericAmount) {
@@ -90,6 +90,7 @@ class WalletService
             $wallet->update(['cached_balance' => $balanceAfter]);
             $lockedWithdrawal->update([
                 'status' => 'paid',
+                'admin_note' => $payoutNote,
                 'processed_by' => $actor->id,
                 'processed_at' => now(),
             ]);
@@ -122,8 +123,9 @@ class WalletService
             }
 
             $wallet = Wallet::query()->where('customer_id', $lockedOrder->customer_id)->lockForUpdate()->firstOrFail();
-            if ((float) $wallet->cached_balance < $numericAmount) {
-                throw ValidationException::withMessages(['amount' => ['The customer does not have enough wallet balance.']]);
+            $reserved = WithdrawalRequest::query()->where('customer_id', $lockedOrder->customer_id)->whereIn('status', ['pending', 'under_review', 'approved'])->lockForUpdate()->get()->sum('amount');
+            if ((int) round((float) $wallet->cached_balance * 100) - (int) round((float) $reserved * 100) < (int) round($numericAmount * 100)) {
+                throw ValidationException::withMessages(['amount' => ['The customer does not have enough available wallet balance. Pending withdrawals reserve wallet funds.']]);
             }
 
             $balanceAfter = (float) $wallet->cached_balance - $numericAmount;

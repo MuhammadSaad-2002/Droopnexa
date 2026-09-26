@@ -8,6 +8,7 @@ use App\Models\OrderRequest;
 use App\Models\User;
 use App\Models\Wallet;
 use App\Models\WalletTransaction;
+use App\Models\WithdrawalRequest;
 use App\Services\WalletService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -178,6 +179,7 @@ class StaffController extends Controller
     {
         $this->ensurePermission($request->user(), 'manage_orders');
         $order->load(['customer:id,name,email', 'product', 'request.items.product', 'statusHistory.changedBy:id,name', 'walletTransactions']);
+        $reserved = WithdrawalRequest::where('customer_id', $order->customer_id)->whereIn('status', ['pending', 'under_review', 'approved'])->sum('amount');
         $wallet = Wallet::firstOrCreate(['customer_id' => $order->customer_id]);
         $completedOrders = Order::query()->where('customer_id', $order->customer_id)->where('status', 'completed')->count();
         $minimumCompletedOrders = config('droopnexa.minimum_completed_orders_for_wallet_redemption', 3);
@@ -187,6 +189,7 @@ class StaffController extends Controller
             'meta' => [
                 'wallet' => [
                     'balance' => (string) $wallet->cached_balance,
+                    'available_balance' => number_format(max(0, (float) $wallet->cached_balance - (float) $reserved), 2, '.', ''),
                     'eligible' => $completedOrders >= $minimumCompletedOrders,
                     'completed_orders' => $completedOrders,
                     'minimum_completed_orders' => $minimumCompletedOrders,

@@ -27,6 +27,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/portal/orders/{order}', [CustomerPortalController::class, 'showOrder']);
         Route::get('/withdrawals', [WithdrawalController::class, 'index']);
         Route::post('/withdrawals', [WithdrawalController::class, 'store']);
+        Route::post('/withdrawals/{withdrawalRequest}/cancel', [WithdrawalController::class, 'cancel']);
         Route::get('/withdrawals/{withdrawalRequest}', [WithdrawalController::class, 'show']);
 
         Route::prefix('staff')->group(function () {
@@ -50,6 +51,7 @@ Route::prefix('v1')->group(function () {
             Route::patch('/categories/{category}', [CategoryController::class, 'update']);
             Route::delete('/categories/{category}', [CategoryController::class, 'destroy']);
             Route::get('/withdrawals', [WithdrawalController::class, 'staffIndex']);
+            Route::post('/withdrawals/{withdrawalRequest}/review', [WithdrawalController::class, 'review']);
             Route::post('/withdrawals/{withdrawalRequest}/approve', [WithdrawalController::class, 'approve']);
             Route::post('/withdrawals/{withdrawalRequest}/reject', [WithdrawalController::class, 'reject']);
             Route::post('/withdrawals/{withdrawalRequest}/process', [WithdrawalController::class, 'process']);

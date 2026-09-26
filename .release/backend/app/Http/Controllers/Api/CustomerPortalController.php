@@ -39,18 +39,22 @@ class CustomerPortalController extends Controller
         $completedOrders = Order::where('customer_id', $customer->id)->where('status', 'completed')->count();
         $minimumCompletedOrders = config('droopnexa.minimum_completed_orders_for_wallet_redemption', 3);
 
+        $reserved = WithdrawalRequest::where('customer_id', $customer->id)->whereIn('status', ['pending', 'under_review', 'approved'])->sum('amount');
+
         return response()->json(['data' => [
             'customer' => $customer->only(['id', 'name', 'email']),
             'wallet' => [
                 'balance' => (string) $wallet->cached_balance,
+                'reserved_balance' => number_format((float) $reserved, 2, '.', ''),
+                'available_balance' => number_format(max(0, (float) $wallet->cached_balance - (float) $reserved), 2, '.', ''),
                 'eligible' => $completedOrders >= $minimumCompletedOrders,
-                'transactions' => $wallet->transactions()->with('order:id,reference')->latest()->limit(10)->get(),
+                'transactions' => $wallet->transactions()->with(['order:id,reference', 'withdrawalRequest:id,reference'])->latest()->limit(10)->get(),
             ],
             'completed_orders' => $completedOrders,
             'completed_orders_threshold' => $minimumCompletedOrders,
             'requests' => OrderRequest::where('customer_id', $customer->id)->with('items')->latest()->limit(10)->get(),
             'orders' => Order::where('customer_id', $customer->id)->with(['product', 'statusHistory'])->latest()->limit(10)->get(),
-            'withdrawals' => WithdrawalRequest::where('customer_id', $customer->id)->latest()->limit(10)->get(),
+            'withdrawals' => WithdrawalRequest::where('customer_id', $customer->id)->with('walletTransaction:id,withdrawal_request_id,reference')->latest()->get(),
         ]]);
     }
 
