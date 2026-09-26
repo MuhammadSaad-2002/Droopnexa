@@ -104,6 +104,19 @@ class StaffController extends Controller
         ]]);
     }
 
+    public function resetCustomerPassword(Request $request, User $customer): JsonResponse
+    {
+        abort_unless($request->user()->isAdmin(), 403, 'Admin access is required.');
+        abort_unless($customer->role === 'customer', 404);
+        $data = $request->validate(['password' => ['required', 'string', 'min:8', 'confirmed']]);
+        DB::transaction(function () use ($customer, $data): void {
+            $customer->update(['password' => $data['password'], 'remember_token' => null]);
+            $customer->tokens()->delete();
+        });
+
+        return response()->json(['message' => 'Customer password reset. Existing sessions have been signed out.']);
+    }
+
     public function updateCustomerStatus(Request $request, User $customer): JsonResponse
     {
         abort_unless($request->user()->isAdmin(), 403, 'Admin access is required.');

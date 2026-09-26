@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\AdminUserController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\CustomerPortalController;
@@ -35,10 +36,14 @@ Route::prefix('v1')->group(function () {
         Route::get('/withdrawals/{withdrawalRequest}', [WithdrawalController::class, 'show']);
 
         Route::prefix('staff')->group(function () {
+            Route::get('/users', [AdminUserController::class, 'index']);
+            Route::post('/users', [AdminUserController::class, 'store']);
+            Route::patch('/users/{user}/status', [AdminUserController::class, 'updateStatus']);
             Route::get('/dashboard', [StaffController::class, 'dashboard']);
             Route::get('/customers', [StaffController::class, 'customers']);
             Route::get('/customers/{customer}', [StaffController::class, 'showCustomer']);
             Route::patch('/customers/{customer}/status', [StaffController::class, 'updateCustomerStatus']);
+            Route::patch('/customers/{customer}/password', [StaffController::class, 'resetCustomerPassword']);
             Route::patch('/site/contact', [SiteContactController::class, 'update']);
             Route::get('/order-requests', [StaffController::class, 'requests']);
             Route::get('/order-requests/{orderRequest}', [StaffController::class, 'showRequest']);

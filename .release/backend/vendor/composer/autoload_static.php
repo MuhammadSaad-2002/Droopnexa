@@ -491,6 +491,7 @@ class ComposerStaticInit1ab05880bd19a6a9d8b54ba5a4c904b2
 
     public static $classMap = array (
         'AllowDynamicProperties' => __DIR__ . '/..' . '/symfony/polyfill-php82/Resources/stubs/AllowDynamicProperties.php',
+        'App\\Http\\Controllers\\Api\\AdminUserController' => __DIR__ . '/../..' . '/app/Http/Controllers/Api/AdminUserController.php',
         'App\\Http\\Controllers\\Api\\AuthController' => __DIR__ . '/../..' . '/app/Http/Controllers/Api/AuthController.php',
         'App\\Http\\Controllers\\Api\\CategoryController' => __DIR__ . '/../..' . '/app/Http/Controllers/Api/CategoryController.php',
         'App\\Http\\Controllers\\Api\\CustomerPortalController' => __DIR__ . '/../..' . '/app/Http/Controllers/Api/CustomerPortalController.php',
