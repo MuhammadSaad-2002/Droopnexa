@@ -10,9 +10,47 @@ use App\Models\Wallet;
 use App\Models\WithdrawalRequest;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 class CustomerPortalController extends Controller
 {
+    public function completeAccount(Request $request): JsonResponse
+    {
+        $customer = $request->user();
+        $this->ensureCustomer($customer);
+
+        if ($request->has('username') && is_string($request->input('username'))) {
+            $request->merge(['username' => Str::lower(trim($request->input('username')))]);
+        }
+
+        $data = $request->validate([
+            'username' => ['sometimes', 'required', 'string', 'min:3', 'max:40', 'alpha_dash', 'unique:users,username'],
+            'first_name' => ['sometimes', 'required', 'string', 'max:80'],
+            'last_name' => ['sometimes', 'required', 'string', 'max:80'],
+        ]);
+
+        $locked = [];
+        foreach (['username', 'first_name', 'last_name'] as $field) {
+            if (array_key_exists($field, $data) && filled($customer->{$field})) {
+                $locked[$field] = ['This field has already been added.'];
+            }
+        }
+        if ($locked !== []) {
+            throw ValidationException::withMessages($locked);
+        }
+
+        if (isset($data['first_name']) || isset($data['last_name'])) {
+            $data['name'] = trim(($data['first_name'] ?? $customer->first_name ?? '').' '.($data['last_name'] ?? $customer->last_name ?? ''));
+        }
+        $customer->update($data);
+
+        return response()->json([
+            'message' => 'Your account details have been saved.',
+            'data' => ['user' => $customer->fresh()->only(['id', 'name', 'first_name', 'last_name', 'username', 'email', 'role', 'status'])],
+        ]);
+    }
+
     public function updateProfile(Request $request): JsonResponse
     {
         $customer = $request->user();
@@ -21,6 +59,7 @@ class CustomerPortalController extends Controller
         $data = $request->validate([
             'phone' => ['present', 'nullable', 'string', 'max:40'],
             'address' => ['present', 'nullable', 'string', 'max:1000'],
+            'country' => ['sometimes', 'nullable', 'string', 'max:120'],
         ]);
 
         $profile = $customer->customerProfile()->updateOrCreate([], $data);
@@ -29,6 +68,21 @@ class CustomerPortalController extends Controller
             'message' => 'Your contact details have been updated.',
             'data' => ['customer_profile' => $profile->only(['phone', 'address', 'country'])],
         ]);
+    }
+
+    public function changePassword(Request $request): JsonResponse
+    {
+        $customer = $request->user();
+        $this->ensureCustomer($customer);
+
+        $data = $request->validate([
+            'current_password' => ['required', 'current_password'],
+            'password' => ['required', 'string', 'min:8', 'confirmed'],
+        ]);
+
+        $customer->update(['password' => $data['password']]);
+
+        return response()->json(['message' => 'Your password has been updated.']);
     }
 
     public function summary(Request $request): JsonResponse

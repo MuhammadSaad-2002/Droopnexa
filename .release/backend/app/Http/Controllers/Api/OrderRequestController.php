@@ -18,6 +18,7 @@ class OrderRequestController extends Controller
         $requests = OrderRequest::query()
             ->with('items.product')
             ->where('customer_id', $request->user()->id)
+            ->when($request->boolean('pending'), fn ($query) => $query->whereIn('status', ['submitted', 'under_review', 'customer_contacted']))
             ->latest('submitted_at')
             ->paginate(10);
 

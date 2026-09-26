@@ -104,6 +104,27 @@ class StaffController extends Controller
         ]]);
     }
 
+    public function updateCustomerStatus(Request $request, User $customer): JsonResponse
+    {
+        abort_unless($request->user()->isAdmin(), 403, 'Admin access is required.');
+        abort_unless($customer->role === 'customer', 404);
+
+        $data = $request->validate(['status' => ['required', 'in:active,banned']]);
+        abort_unless(
+            ($customer->status === 'active' && $data['status'] === 'banned') ||
+            ($customer->status === 'banned' && $data['status'] === 'active'),
+            422,
+            'This account status cannot be changed with this action.'
+        );
+
+        $customer->update(['status' => $data['status']]);
+        if ($data['status'] === 'banned') {
+            $customer->tokens()->delete();
+        }
+
+        return response()->json(['data' => $customer->only(['id', 'name', 'email', 'status'])]);
+    }
+
     public function requests(Request $request): JsonResponse
     {
         $this->ensurePermission($request->user(), 'manage_requests');

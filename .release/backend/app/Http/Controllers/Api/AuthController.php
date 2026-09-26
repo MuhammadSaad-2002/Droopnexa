@@ -76,7 +76,7 @@ class AuthController extends Controller
 
         if (! $user->isActive()) {
             throw ValidationException::withMessages([
-                'login' => ['This account is currently disabled.'],
+                'login' => [$user->status === 'banned' ? 'This account has been banned.' : 'This account is currently disabled.'],
             ]);
         }
 
