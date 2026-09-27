@@ -15,6 +15,7 @@ Route::prefix('v1')->group(function () {
     Route::post('/auth/register', [AuthController::class, 'register']);
     Route::post('/auth/login', [AuthController::class, 'login']);
     Route::get('/site/contact', [SiteContactController::class, 'show']);
+    Route::get('/categories', [CategoryController::class, 'publicIndex']);
     Route::get('/products', [ProductController::class, 'index']);
     Route::get('/products/{product:slug}', [ProductController::class, 'show']);
 
@@ -38,8 +39,10 @@ Route::prefix('v1')->group(function () {
         Route::prefix('staff')->group(function () {
             Route::get('/users', [AdminUserController::class, 'index']);
             Route::post('/users', [AdminUserController::class, 'store']);
+            Route::patch('/users/{user}', [AdminUserController::class, 'update']);
             Route::patch('/users/{user}/status', [AdminUserController::class, 'updateStatus']);
             Route::get('/dashboard', [StaffController::class, 'dashboard']);
+            Route::patch('/password', [StaffController::class, 'changePassword']);
             Route::get('/customers', [StaffController::class, 'customers']);
             Route::get('/customers/{customer}', [StaffController::class, 'showCustomer']);
             Route::patch('/customers/{customer}/status', [StaffController::class, 'updateCustomerStatus']);
@@ -58,6 +61,8 @@ Route::prefix('v1')->group(function () {
             Route::patch('/products/{product}', [ProductController::class, 'update']);
             Route::delete('/products/{product}', [ProductController::class, 'destroy']);
             Route::get('/categories', [CategoryController::class, 'index']);
+            Route::post('/categories/{category}/image', [CategoryController::class, 'updateImage']);
+            Route::delete('/categories/{category}/image', [CategoryController::class, 'removeImage']);
             Route::post('/categories', [CategoryController::class, 'store']);
             Route::patch('/categories/{category}', [CategoryController::class, 'update']);
             Route::delete('/categories/{category}', [CategoryController::class, 'destroy']);

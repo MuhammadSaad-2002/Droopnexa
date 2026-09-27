@@ -44,6 +44,40 @@ class AdminUserController extends Controller
         return response()->json(['data' => $this->summary($user)], 201);
     }
 
+    public function update(Request $request, User $user): JsonResponse
+    {
+        $this->ensureAdmin($request);
+        abort_unless(in_array($user->role, ['admin', 'support'], true), 404);
+        $request->merge(['email' => Str::lower(trim((string) $request->input('email')))]);
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
+            'role' => ['required', Rule::in(['admin', 'support'])],
+            'password' => ['nullable', 'string', 'min:8', 'confirmed'],
+        ]);
+        DB::transaction(function () use ($request, $user, $data): void {
+            $admins = User::where('role', 'admin')->orderBy('id')->lockForUpdate()->get();
+            $actor = $admins->firstWhere('id', $request->user()->id);
+            abort_unless($actor?->isActive(), 403, 'Admin access is required.');
+            $user->refresh();
+            if ($user->role === 'admin' && $data['role'] !== 'admin') {
+                abort_if($user->id === $actor->id, 422, 'You cannot change your own admin role.');
+                abort_if($user->isActive() && $admins->where('status', 'active')->count() <= 1, 422, 'The last active admin must keep admin access.');
+            }
+            $changes = ['name' => trim($data['name']), 'email' => $data['email'], 'role' => $data['role']];
+            if (! empty($data['password'])) {
+                $changes['password'] = $data['password'];
+            }
+            $revoke = ! empty($data['password']) || $user->role !== $data['role'];
+            $user->update($changes);
+            if ($revoke) {
+                $user->tokens()->delete();
+            }
+        });
+
+        return response()->json(['data' => $this->summary($user)]);
+    }
+
     public function updateStatus(Request $request, User $user): JsonResponse
     {
         $this->ensureAdmin($request);

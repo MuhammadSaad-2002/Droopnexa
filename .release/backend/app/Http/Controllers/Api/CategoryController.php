@@ -13,6 +13,29 @@ use Illuminate\Validation\Rule;
 
 class CategoryController extends Controller
 {
+    public function publicIndex(): JsonResponse
+    {
+        return response()->json(['data' => Category::where('is_active', true)->get(['name', 'slug', 'image_url'])]);
+    }
+
+    public function removeImage(Request $request, Category $category): JsonResponse
+    {
+        $this->ensureProductPermission($request);
+        $category->update(['image_url' => null]);
+
+        return response()->json(['data' => $category->fresh()->loadCount('products')]);
+    }
+
+    public function updateImage(Request $request, Category $category): JsonResponse
+    {
+        $this->ensureProductPermission($request);
+        $request->validate(['image' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120']]);
+        $path = $request->file('image')->store('categories', 'public');
+        $category->update(['image_url' => url('/storage/'.$path)]);
+
+        return response()->json(['data' => $category->fresh()->loadCount('products')]);
+    }
+
     public function index(Request $request): JsonResponse
     {
         $this->ensureProductPermission($request);

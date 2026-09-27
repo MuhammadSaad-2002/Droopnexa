@@ -14,6 +14,7 @@ class Category extends Model
         'name',
         'slug',
         'is_active',
+        'image_url',
     ];
 
     protected function casts(): array

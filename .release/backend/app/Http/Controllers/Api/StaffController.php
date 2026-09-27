@@ -17,6 +17,18 @@ use Illuminate\Support\Str;
 
 class StaffController extends Controller
 {
+    public function changePassword(Request $request): JsonResponse
+    {
+        abort_unless($request->user()->isStaff(), 403, 'Staff access is required.');
+        $data = $request->validate([
+            'current_password' => ['required', 'current_password'],
+            'password' => ['required', 'string', 'min:8', 'confirmed'],
+        ]);
+        $request->user()->update(['password' => $data['password']]);
+
+        return response()->json(['message' => 'Your password has been updated.']);
+    }
+
     public function dashboard(Request $request): JsonResponse
     {
         $this->ensurePermission($request->user(), 'view_dashboard');
@@ -27,6 +39,7 @@ class StaffController extends Controller
             'customers' => User::where('role', 'customer')->count(),
             'pending_requests' => OrderRequest::whereIn('status', ['submitted', 'under_review', 'customer_contacted'])->count(),
             'confirmed_orders' => Order::whereIn('status', ['confirmed', 'processing'])->count(),
+            'pending_withdrawals' => WithdrawalRequest::whereIn('status', ['pending', 'under_review', 'approved'])->count(),
             'completed_orders' => Order::where('status', 'completed')->count(),
             'cashback_posted' => (float) DB::table('wallet_transactions')->where('type', 'cashback')->sum('amount'),
         ]]);
