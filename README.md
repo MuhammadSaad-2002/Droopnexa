@@ -4,10 +4,10 @@ This branch contains the compiled frontend and Laravel runtime dependencies. Hos
 
 ## First deployment
 
-1. Set `droopnexa.vwisdomtechnologies.com` to PHP 8.3 in cPanel MultiPHP Manager. Enable the standard Laravel PHP extensions, including `pdo_mysql`, `mbstring`, `fileinfo`, `xml`, and `curl`.
+1. Set `droopnexa.com` to PHP 8.3 in cPanel MultiPHP Manager. Enable the standard Laravel PHP extensions, including `pdo_mysql`, `mbstring`, `fileinfo`, `xml`, and `curl`.
 2. In Git Version Control, use branch `main` and click **Update from Remote**. The repository/document-root path is `/home2/vwisdomo/droopnexa.vwisdomtechnologies.com`.
 3. Click **Deploy HEAD Commit**. On its first run, the script creates `/home2/vwisdomo/droopnexa-private/.env` and stops with a configuration message.
-4. In File Manager, enable hidden files and edit that private `.env`. Set `DB_PASSWORD` to your database password. The database/user are prefilled as `vwisdomo_droopnexa`; ensure that user has permissions on that database. Keep `APP_DEBUG=false`.
+4. In File Manager, enable hidden files and edit that private `.env`. Set `DB_PASSWORD` to your database password. The database/user are prefilled as `droopnex_official`; ensure that user has permissions on that database. Keep `APP_DEBUG=false`.
 5. Click **Deploy HEAD Commit** again. It generates the application key once, applies migrations, builds Laravel caches, and links public uploads. A successful run ends with `DroopNexa deployed with PHP 8.3`.
 6. Check the homepage, a product detail URL, login, and `/api/v1/products`.
 
@@ -42,3 +42,7 @@ Use **Update from Remote**, then **Deploy HEAD Commit**. Do not edit tracked fil
 The release frontend runs in the browser and shares the same React screens as the local Next.js application. New product slugs and portal record URLs resolve at runtime without a frontend rebuild. Public page content requires JavaScript; this build does not provide Next.js server rendering.
 
 Build source remains in the development workspace. Generate a fresh release with `bash scripts/build-cpanel.sh` from the workspace root, then commit the contents of `deploy-build/` to this deployment branch. Never add local `.env` files, development databases, or uploaded customer files.
+
+## Production domain configuration
+
+Point `droopnexa.com` to the existing document root, or update the repository path in `.cpanel.yml` if cPanel uses a new directory. In the existing private `.env`, set `APP_URL` and `FRONTEND_URL` to `https://droopnexa.com`, and set `DB_DATABASE` and `DB_USERNAME` to `droopnex_official`. Set the database password privately, then redeploy to refresh configuration caches. Existing private environment files are preserved by deployment.
