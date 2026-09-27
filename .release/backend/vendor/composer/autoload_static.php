@@ -501,6 +501,7 @@ class ComposerStaticInit1ab05880bd19a6a9d8b54ba5a4c904b2
         'App\\Http\\Controllers\\Api\\StaffController' => __DIR__ . '/../..' . '/app/Http/Controllers/Api/StaffController.php',
         'App\\Http\\Controllers\\Api\\WithdrawalController' => __DIR__ . '/../..' . '/app/Http/Controllers/Api/WithdrawalController.php',
         'App\\Http\\Controllers\\Controller' => __DIR__ . '/../..' . '/app/Http/Controllers/Controller.php',
+        'App\\Http\\Controllers\\SitemapController' => __DIR__ . '/../..' . '/app/Http/Controllers/SitemapController.php',
         'App\\Http\\Middleware\\EnsureActiveUser' => __DIR__ . '/../..' . '/app/Http/Middleware/EnsureActiveUser.php',
         'App\\Models\\Category' => __DIR__ . '/../..' . '/app/Models/Category.php',
         'App\\Models\\CustomerProfile' => __DIR__ . '/../..' . '/app/Models/CustomerProfile.php',

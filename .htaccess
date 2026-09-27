@@ -17,6 +17,7 @@ RewriteRule ^storage/.*\.(php[0-9]*|phtml|phar|cgi|pl|sh)(/|$) - [R=404,L,NC]
 RewriteRule ^(?!index\.php$).*\.(php[0-9]*|phtml|phar)(/|$) - [R=404,L,NC]
 RewriteCond %{HTTP:Authorization} .
 RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+RewriteRule ^sitemap\.xml$ index.php [L,QSA]
 RewriteRule ^api(?:/|$) index.php [L,QSA]
 RewriteCond %{REQUEST_FILENAME} -f [OR]
 RewriteCond %{REQUEST_FILENAME} -d

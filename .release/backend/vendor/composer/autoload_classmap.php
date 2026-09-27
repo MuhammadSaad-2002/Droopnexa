@@ -17,6 +17,7 @@ return array(
     'App\\Http\\Controllers\\Api\\StaffController' => $baseDir . '/app/Http/Controllers/Api/StaffController.php',
     'App\\Http\\Controllers\\Api\\WithdrawalController' => $baseDir . '/app/Http/Controllers/Api/WithdrawalController.php',
     'App\\Http\\Controllers\\Controller' => $baseDir . '/app/Http/Controllers/Controller.php',
+    'App\\Http\\Controllers\\SitemapController' => $baseDir . '/app/Http/Controllers/SitemapController.php',
     'App\\Http\\Middleware\\EnsureActiveUser' => $baseDir . '/app/Http/Middleware/EnsureActiveUser.php',
     'App\\Models\\Category' => $baseDir . '/app/Models/Category.php',
     'App\\Models\\CustomerProfile' => $baseDir . '/app/Models/CustomerProfile.php',

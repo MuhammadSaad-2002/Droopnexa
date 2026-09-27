@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /staff
+Disallow: /portal
+Disallow: /cart
+Disallow: /order-success
+Disallow: /api/
+
+Sitemap: https://droopnexa.com/sitemap.xml
