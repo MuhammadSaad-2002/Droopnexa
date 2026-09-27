@@ -5,8 +5,8 @@ This branch contains the compiled frontend and Laravel runtime dependencies. Hos
 ## First deployment
 
 1. Set `droopnexa.com` to PHP 8.3 in cPanel MultiPHP Manager. Enable the standard Laravel PHP extensions, including `pdo_mysql`, `mbstring`, `fileinfo`, `xml`, and `curl`.
-2. In Git Version Control, use branch `main` and click **Update from Remote**. The repository/document-root path is `/home2/vwisdomo/droopnexa.vwisdomtechnologies.com`.
-3. Click **Deploy HEAD Commit**. On its first run, the script creates `/home2/vwisdomo/droopnexa-private/.env` and stops with a configuration message.
+2. In Git Version Control, use branch `main` and click **Update from Remote**. The repository/document-root path is `/home2/droopnex/public_html`.
+3. Click **Deploy HEAD Commit**. On its first run, the script creates `/home2/droopnex/droopnexa-private/.env` and stops with a configuration message.
 4. In File Manager, enable hidden files and edit that private `.env`. Set `DB_PASSWORD` to your database password. The database/user are prefilled as `droopnex_official`; ensure that user has permissions on that database. Keep `APP_DEBUG=false`.
 5. Click **Deploy HEAD Commit** again. It generates the application key once, applies migrations, builds Laravel caches, and links public uploads. A successful run ends with `DroopNexa deployed with PHP 8.3`.
 6. Check the homepage, a product detail URL, login, and `/api/v1/products`.
@@ -20,7 +20,7 @@ Deployment preserves the private `.env`, application key, uploaded files, and da
 For a new, empty database only, you can load the starter catalogue in cPanel Terminal:
 
 ```sh
-cd /home2/vwisdomo/droopnexa-private
+cd /home2/droopnex/droopnexa-private
 /opt/cpanel/ea-php83/root/usr/bin/php artisan db:seed --class=ProductSeeder --force
 ```
 
