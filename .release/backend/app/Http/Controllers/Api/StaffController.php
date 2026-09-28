@@ -262,20 +262,46 @@ class StaffController extends Controller
             'rejected' => [],
         ];
         abort_unless(in_array($data['status'], $allowedTransitions[$order->status] ?? [], true), 422, 'That status change is not available from the current order status.');
-        $updated = DB::transaction(function () use ($data, $order, $request) {
-            $fromStatus = $order->status;
-            $order->update([
+        $updated = DB::transaction(function () use ($data, $order, $request, $allowedTransitions) {
+            $lockedOrder = Order::query()->lockForUpdate()->findOrFail($order->id);
+            abort_unless(in_array($data['status'], $allowedTransitions[$lockedOrder->status] ?? [], true), 422, 'That status change is not available from the current order status.');
+            $fromStatus = $lockedOrder->status;
+            $lockedOrder->update([
                 'status' => $data['status'],
-                'completed_at' => $data['status'] === 'completed' ? now() : $order->completed_at,
+                'completed_at' => $data['status'] === 'completed' ? now() : $lockedOrder->completed_at,
+                'payment_status' => $data['status'] === 'completed' ? 'paid' : $lockedOrder->payment_status,
+                'external_amount_due' => $data['status'] === 'completed' ? 0 : $lockedOrder->external_amount_due,
             ]);
-            $order->statusHistory()->create([
+            $lockedOrder->statusHistory()->create([
                 'from_status' => $fromStatus,
                 'to_status' => $data['status'],
                 'note' => $data['note'] ?? null,
                 'changed_by' => $request->user()->id,
             ]);
 
-            return $order->fresh(['customer:id,name,email', 'product', 'statusHistory']);
+            return $lockedOrder->fresh(['customer:id,name,email', 'product', 'statusHistory']);
+        });
+
+        return response()->json(['data' => $updated]);
+    }
+
+    public function markPaid(Request $request, Order $order): JsonResponse
+    {
+        $this->ensurePermission($request->user(), 'manage_orders');
+        $data = $request->validate(['payment_method' => ['required', 'string', 'max:120']]);
+
+        $updated = DB::transaction(function () use ($order, $data) {
+            $lockedOrder = Order::query()->lockForUpdate()->findOrFail($order->id);
+            abort_unless(in_array($lockedOrder->status, ['confirmed', 'processing'], true), 422, 'This order cannot be marked as paid.');
+            abort_unless($lockedOrder->payment_status === 'unpaid' && (float) $lockedOrder->wallet_amount_used === 0.0, 422, 'This order has already been paid or has a wallet payment recorded.');
+
+            $lockedOrder->update([
+                'payment_status' => 'paid',
+                'payment_method' => $data['payment_method'],
+                'external_amount_due' => 0,
+            ]);
+
+            return $lockedOrder->fresh(['customer:id,name,email', 'product', 'statusHistory']);
         });
 
         return response()->json(['data' => $updated]);
@@ -293,7 +319,7 @@ class StaffController extends Controller
     public function redeemWallet(Request $request, Order $order, WalletService $walletService): JsonResponse
     {
         $this->ensurePermission($request->user(), 'manage_orders');
-        $data = $request->validate(['amount' => ['required', 'numeric', 'min:0.01']]);
+        $data = $request->validate(['amount' => ['required', 'numeric', 'decimal:0,2', 'min:0.01']]);
         $transaction = $walletService->redeemAgainstOrder($order, (string) $data['amount'], $request->user());
 
         return response()->json(['data' => $transaction->load('order')], 201);

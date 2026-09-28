@@ -31,6 +31,7 @@ Route::prefix('v1')->group(function () {
         Route::patch('/portal/password', [CustomerPortalController::class, 'changePassword']);
         Route::get('/portal/orders', [CustomerPortalController::class, 'orders']);
         Route::get('/portal/orders/{order}', [CustomerPortalController::class, 'showOrder']);
+        Route::post('/portal/orders/{order}/wallet-payment', [CustomerPortalController::class, 'payWithWallet']);
         Route::get('/withdrawals', [WithdrawalController::class, 'index']);
         Route::post('/withdrawals', [WithdrawalController::class, 'store']);
         Route::post('/withdrawals/{withdrawalRequest}/cancel', [WithdrawalController::class, 'cancel']);
@@ -54,6 +55,7 @@ Route::prefix('v1')->group(function () {
             Route::get('/orders', [StaffController::class, 'orders']);
             Route::get('/orders/{order}', [StaffController::class, 'showOrder']);
             Route::patch('/orders/{order}/status', [StaffController::class, 'updateStatus']);
+            Route::patch('/orders/{order}/payment', [StaffController::class, 'markPaid']);
             Route::post('/orders/{order}/cashback', [StaffController::class, 'addCashback']);
             Route::post('/orders/{order}/wallet-redemption', [StaffController::class, 'redeemWallet']);
             Route::get('/products', [ProductController::class, 'staffIndex']);

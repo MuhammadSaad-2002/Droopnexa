@@ -8,6 +8,7 @@ use App\Models\OrderRequest;
 use App\Models\User;
 use App\Models\Wallet;
 use App\Models\WithdrawalRequest;
+use App\Services\WalletService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -106,7 +107,15 @@ class CustomerPortalController extends Controller
             ],
             'completed_orders' => $completedOrders,
             'completed_orders_threshold' => $minimumCompletedOrders,
-            'requests' => OrderRequest::where('customer_id', $customer->id)->with('items')->latest()->limit(10)->get(),
+            'pending_orders_count' => OrderRequest::where('customer_id', $customer->id)
+                ->whereIn('status', ['submitted', 'under_review', 'customer_contacted'])
+                ->count(),
+            'requests' => OrderRequest::where('customer_id', $customer->id)
+                ->whereIn('status', ['submitted', 'under_review', 'customer_contacted'])
+                ->with('items')
+                ->latest('submitted_at')
+                ->limit(10)
+                ->get(),
             'orders' => Order::where('customer_id', $customer->id)->with(['product', 'statusHistory'])->latest()->limit(10)->get(),
             'withdrawals' => WithdrawalRequest::where('customer_id', $customer->id)->with('walletTransaction:id,withdrawal_request_id,reference')->latest()->get(),
         ]]);
@@ -137,6 +146,16 @@ class CustomerPortalController extends Controller
                 'walletTransactions',
             ]),
         ]);
+    }
+
+    public function payWithWallet(Request $request, Order $order, WalletService $walletService): JsonResponse
+    {
+        $this->ensureCustomer($request->user());
+        abort_unless($order->customer_id === $request->user()->id, 404);
+
+        $transaction = $walletService->redeemAgainstOrder($order, (string) $order->order_total, $request->user());
+
+        return response()->json(['data' => $transaction->load('order')], 201);
     }
 
     private function ensureCustomer(User $user): void

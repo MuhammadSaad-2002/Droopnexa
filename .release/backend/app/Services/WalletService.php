@@ -108,6 +108,10 @@ class WalletService
                 throw ValidationException::withMessages(['order' => ['Wallet credit cannot be applied to this order.']]);
             }
 
+            if ($lockedOrder->payment_status !== 'unpaid') {
+                throw ValidationException::withMessages(['order' => ['This order has already been paid.']]);
+            }
+
             if (WalletTransaction::query()->where('order_id', $lockedOrder->id)->where('type', 'order_redemption')->exists()) {
                 throw ValidationException::withMessages(['order' => ['Wallet credit has already been applied to this order.']]);
             }
@@ -117,17 +121,19 @@ class WalletService
                 throw ValidationException::withMessages(['order' => ['The customer is not eligible to use wallet credit yet.']]);
             }
 
-            $numericAmount = (float) $amount;
-            if ($numericAmount <= 0 || $numericAmount > (float) $lockedOrder->order_total) {
-                throw ValidationException::withMessages(['amount' => ['Wallet credit must be greater than zero and no more than the order total.']]);
+            $orderTotalCents = (int) round((float) $lockedOrder->order_total * 100);
+            $amountCents = (int) round((float) $amount * 100);
+            if ($amountCents !== $orderTotalCents || $orderTotalCents <= 0) {
+                throw ValidationException::withMessages(['amount' => ['Wallet payment must cover the full order total. Partial wallet payments are not allowed.']]);
             }
 
             $wallet = Wallet::query()->where('customer_id', $lockedOrder->customer_id)->lockForUpdate()->firstOrFail();
             $reserved = WithdrawalRequest::query()->where('customer_id', $lockedOrder->customer_id)->whereIn('status', ['pending', 'under_review', 'approved'])->lockForUpdate()->get()->sum('amount');
-            if ((int) round((float) $wallet->cached_balance * 100) - (int) round((float) $reserved * 100) < (int) round($numericAmount * 100)) {
+            if ((int) round((float) $wallet->cached_balance * 100) - (int) round((float) $reserved * 100) < $orderTotalCents) {
                 throw ValidationException::withMessages(['amount' => ['The customer does not have enough available wallet balance. Pending withdrawals reserve wallet funds.']]);
             }
 
+            $numericAmount = $orderTotalCents / 100;
             $balanceAfter = (float) $wallet->cached_balance - $numericAmount;
             $transaction = $wallet->transactions()->create([
                 'customer_id' => $lockedOrder->customer_id,
@@ -144,8 +150,9 @@ class WalletService
             $wallet->update(['cached_balance' => $balanceAfter]);
             $lockedOrder->update([
                 'wallet_amount_used' => $numericAmount,
-                'external_amount_due' => max((float) $lockedOrder->order_total - $numericAmount, 0),
-                'payment_status' => $numericAmount >= (float) $lockedOrder->order_total ? 'paid' : 'partial',
+                'external_amount_due' => 0,
+                'payment_status' => 'paid',
+                'payment_method' => 'wallet',
             ]);
 
             return $transaction->load('order');
