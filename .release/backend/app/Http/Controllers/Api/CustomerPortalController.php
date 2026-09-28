@@ -108,11 +108,11 @@ class CustomerPortalController extends Controller
             'completed_orders' => $completedOrders,
             'completed_orders_threshold' => $minimumCompletedOrders,
             'pending_orders_count' => OrderRequest::where('customer_id', $customer->id)
-                ->whereIn('status', ['submitted', 'under_review', 'customer_contacted'])
+                ->whereIn('status', OrderRequest::OPEN_STATUSES)
                 ->count(),
             'requests' => OrderRequest::where('customer_id', $customer->id)
-                ->whereIn('status', ['submitted', 'under_review', 'customer_contacted'])
-                ->with('items')
+                ->whereIn('status', OrderRequest::OPEN_STATUSES)
+                ->with(['items', 'orders:id,order_request_id,reference,status,product_id'])
                 ->latest('submitted_at')
                 ->limit(10)
                 ->get(),
@@ -126,7 +126,7 @@ class CustomerPortalController extends Controller
         $this->ensureCustomer($request->user());
         $orders = Order::query()
             ->where('customer_id', $request->user()->id)
-            ->with(['product', 'request.items.product', 'statusHistory.changedBy:id,name', 'walletTransactions'])
+            ->with(['product', 'request.items.product', 'request.orders:id,order_request_id,product_id,status', 'statusHistory.changedBy:id,name', 'walletTransactions'])
             ->latest()
             ->paginate(10);
 
@@ -142,6 +142,7 @@ class CustomerPortalController extends Controller
             'data' => $order->load([
                 'product',
                 'request.items.product',
+                'request.orders:id,order_request_id,product_id,status',
                 'statusHistory.changedBy:id,name',
                 'walletTransactions',
             ]),

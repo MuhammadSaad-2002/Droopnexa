@@ -9,6 +9,10 @@ class OrderRequest extends Model
 {
     use HasFactory;
 
+    public const OPEN_STATUSES = ['submitted', 'under_review', 'customer_contacted', 'partially_ordered'];
+
+    protected $appends = ['ordered_count', 'remaining_count'];
+
     protected $fillable = [
         'reference',
         'customer_id',
@@ -34,8 +38,33 @@ class OrderRequest extends Model
         return $this->hasMany(OrderRequestItem::class);
     }
 
-    public function order()
+    public function orders()
     {
-        return $this->hasOne(Order::class);
+        return $this->hasMany(Order::class)->latest();
+    }
+
+    public function getOrderedCountAttribute(): int
+    {
+        $selected = $this->items->pluck('product_id');
+
+        return $this->orders->whereNotIn('status', ['cancelled', 'rejected'])
+            ->pluck('product_id')->unique()->intersect($selected)->count();
+    }
+
+    public function getRemainingCountAttribute(): int
+    {
+        return max(0, $this->items->count() - $this->ordered_count);
+    }
+
+    public function syncOrderProgress(): void
+    {
+        if ($this->status === 'rejected') {
+            return;
+        }
+
+        $this->load(['items:id,order_request_id,product_id', 'orders:id,order_request_id,product_id,status']);
+        $status = $this->remaining_count === 0 ? 'product_finalized'
+            : ($this->ordered_count > 0 ? 'partially_ordered' : 'under_review');
+        $this->update(['status' => $status]);
     }
 }

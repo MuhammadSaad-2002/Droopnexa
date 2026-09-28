@@ -37,7 +37,7 @@ class StaffController extends Controller
             'viewer' => $request->user()->only(['id', 'name', 'email', 'role']),
             'permissions' => $request->user()->staffPermissions(),
             'customers' => User::where('role', 'customer')->count(),
-            'pending_requests' => OrderRequest::whereIn('status', ['submitted', 'under_review', 'customer_contacted'])->count(),
+            'pending_requests' => OrderRequest::whereIn('status', OrderRequest::OPEN_STATUSES)->count(),
             'confirmed_orders' => Order::whereIn('status', ['confirmed', 'processing'])->count(),
             'pending_withdrawals' => WithdrawalRequest::whereIn('status', ['pending', 'under_review', 'approved'])->count(),
             'completed_orders' => Order::where('status', 'completed')->count(),
@@ -69,11 +69,11 @@ class StaffController extends Controller
 
         $customer->load('customerProfile');
         $orders = $customer->orders()
-            ->with(['product:id,title,category,icon', 'request:id,reference', 'statusHistory'])
+            ->with(['product:id,title,category,icon', 'request:id,reference', 'request.items:id,order_request_id,product_id', 'request.orders:id,order_request_id,product_id,status', 'statusHistory'])
             ->latest()
             ->get();
         $orderRequests = $customer->orderRequests()
-            ->with(['items.product:id,title,category,icon', 'order:id,reference,status,product_id'])
+            ->with(['items.product:id,title,category,icon', 'orders:id,order_request_id,reference,status,product_id'])
             ->latest('submitted_at')
             ->get();
         $wallet = Wallet::query()->where('customer_id', $customer->id)->first();
@@ -154,8 +154,8 @@ class StaffController extends Controller
     public function requests(Request $request): JsonResponse
     {
         $this->ensurePermission($request->user(), 'manage_requests');
-        $requests = OrderRequest::whereIn('status', ['submitted', 'under_review', 'customer_contacted'])
-            ->with(['customer:id,name,email', 'items.product:id,title,slug,category,display_price,icon', 'order:id,reference,status'])
+        $requests = OrderRequest::whereIn('status', OrderRequest::OPEN_STATUSES)
+            ->with(['customer:id,name,email', 'items.product:id,title,slug,category,display_price,icon', 'orders:id,order_request_id,reference,status,product_id'])
             ->latest('submitted_at')->paginate(12);
 
         return response()->json($requests);
@@ -165,7 +165,7 @@ class StaffController extends Controller
     {
         $this->ensurePermission($request->user(), 'manage_requests');
 
-        return response()->json(['data' => $orderRequest->load(['customer:id,name,email', 'items.product', 'order.statusHistory'])]);
+        return response()->json(['data' => $orderRequest->load(['customer:id,name,email', 'items.product', 'orders.statusHistory'])]);
     }
 
     public function finalize(Request $request, OrderRequest $orderRequest): JsonResponse
@@ -178,15 +178,17 @@ class StaffController extends Controller
             'notes' => ['nullable', 'string', 'max:2000'],
         ]);
 
-        abort_unless(in_array($orderRequest->status, ['submitted', 'under_review', 'customer_contacted'], true), 422, 'This request is no longer available for finalization.');
-        $item = $orderRequest->items()->where('product_id', $data['product_id'])->firstOrFail();
-        abort_if($orderRequest->order()->exists(), 422, 'This request has already been finalized.');
+        $order = DB::transaction(function () use ($data, $orderRequest, $request) {
+            $lockedRequest = OrderRequest::query()->lockForUpdate()->findOrFail($orderRequest->id);
+            abort_unless(in_array($lockedRequest->status, OrderRequest::OPEN_STATUSES, true), 422, 'This request is no longer available for finalization.');
+            $item = $lockedRequest->items()->where('product_id', $data['product_id'])->firstOrFail();
+            abort_if($lockedRequest->orders()->where('product_id', $item->product_id)
+                ->whereNotIn('status', ['cancelled', 'rejected'])->exists(), 422, 'This product already has an active order from this request.');
 
-        $order = DB::transaction(function () use ($data, $orderRequest, $item, $request) {
             $order = Order::create([
                 'reference' => 'ORD-'.strtoupper(Str::random(8)),
-                'customer_id' => $orderRequest->customer_id,
-                'order_request_id' => $orderRequest->id,
+                'customer_id' => $lockedRequest->customer_id,
+                'order_request_id' => $lockedRequest->id,
                 'product_id' => $item->product_id,
                 'product_title_snapshot' => $item->product_title_snapshot,
                 'order_total' => $data['order_total'],
@@ -206,7 +208,8 @@ class StaffController extends Controller
                 'changed_by' => $request->user()->id,
             ]);
 
-            $orderRequest->update(['status' => 'product_finalized', 'reviewed_by' => $request->user()->id]);
+            $lockedRequest->update(['reviewed_by' => $request->user()->id]);
+            $lockedRequest->syncOrderProgress();
 
             return $order->load(['customer:id,name,email', 'product', 'statusHistory']);
         });
@@ -225,7 +228,7 @@ class StaffController extends Controller
     public function showOrder(Request $request, Order $order): JsonResponse
     {
         $this->ensurePermission($request->user(), 'manage_orders');
-        $order->load(['customer:id,name,email', 'product', 'request.items.product', 'statusHistory.changedBy:id,name', 'walletTransactions']);
+        $order->load(['customer:id,name,email', 'product', 'request.items.product', 'request.orders:id,order_request_id,product_id,status', 'statusHistory.changedBy:id,name', 'walletTransactions']);
         $reserved = WithdrawalRequest::where('customer_id', $order->customer_id)->whereIn('status', ['pending', 'under_review', 'approved'])->sum('amount');
         $wallet = Wallet::firstOrCreate(['customer_id' => $order->customer_id]);
         $completedOrders = Order::query()->where('customer_id', $order->customer_id)->where('status', 'completed')->count();
@@ -263,6 +266,7 @@ class StaffController extends Controller
         ];
         abort_unless(in_array($data['status'], $allowedTransitions[$order->status] ?? [], true), 422, 'That status change is not available from the current order status.');
         $updated = DB::transaction(function () use ($data, $order, $request, $allowedTransitions) {
+            $lockedRequest = OrderRequest::query()->lockForUpdate()->findOrFail($order->order_request_id);
             $lockedOrder = Order::query()->lockForUpdate()->findOrFail($order->id);
             abort_unless(in_array($data['status'], $allowedTransitions[$lockedOrder->status] ?? [], true), 422, 'That status change is not available from the current order status.');
             $fromStatus = $lockedOrder->status;
@@ -278,6 +282,10 @@ class StaffController extends Controller
                 'note' => $data['note'] ?? null,
                 'changed_by' => $request->user()->id,
             ]);
+
+            if (in_array($data['status'], ['cancelled', 'rejected'], true)) {
+                $lockedRequest->syncOrderProgress();
+            }
 
             return $lockedOrder->fresh(['customer:id,name,email', 'product', 'statusHistory']);
         });

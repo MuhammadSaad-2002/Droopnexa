@@ -16,9 +16,9 @@ class OrderRequestController extends Controller
     {
         $this->ensureCustomer($request);
         $requests = OrderRequest::query()
-            ->with('items.product')
+            ->with(['items.product', 'orders:id,order_request_id,reference,status,product_id'])
             ->where('customer_id', $request->user()->id)
-            ->when($request->boolean('pending'), fn ($query) => $query->whereIn('status', ['submitted', 'under_review', 'customer_contacted']))
+            ->when($request->boolean('pending'), fn ($query) => $query->whereIn('status', OrderRequest::OPEN_STATUSES))
             ->latest('submitted_at')
             ->paginate(10);
 
@@ -61,7 +61,7 @@ class OrderRequestController extends Controller
                 ]);
             }
 
-            return $orderRequest->load('items.product');
+            return $orderRequest->load(['items.product', 'orders']);
         });
 
         return response()->json(['data' => $orderRequest], 201);
@@ -73,7 +73,7 @@ class OrderRequestController extends Controller
         abort_unless($orderRequest->customer_id === $request->user()->id, 404);
 
         return response()->json([
-            'data' => $orderRequest->load('items.product'),
+            'data' => $orderRequest->load(['items.product', 'orders:id,order_request_id,reference,status,product_id']),
         ]);
     }
 
