@@ -11,6 +11,8 @@ class OrderRequest extends Model
 
     public const OPEN_STATUSES = ['submitted', 'under_review', 'customer_contacted', 'partially_ordered'];
 
+    public const CLOSED_STATUSES = ['product_finalized', 'closed_manually', 'rejected'];
+
     protected $appends = ['ordered_count', 'remaining_count'];
 
     protected $fillable = [
@@ -58,13 +60,13 @@ class OrderRequest extends Model
 
     public function syncOrderProgress(): void
     {
-        if ($this->status === 'rejected') {
+        if (in_array($this->status, ['rejected', 'closed_manually'], true)) {
             return;
         }
 
         $this->load(['items:id,order_request_id,product_id', 'orders:id,order_request_id,product_id,status']);
         $status = $this->remaining_count === 0 ? 'product_finalized'
-            : ($this->ordered_count > 0 ? 'partially_ordered' : 'under_review');
+            : ($this->orders->isNotEmpty() ? 'partially_ordered' : 'under_review');
         $this->update(['status' => $status]);
     }
 }

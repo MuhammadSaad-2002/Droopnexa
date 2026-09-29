@@ -38,6 +38,9 @@ class StaffController extends Controller
             'permissions' => $request->user()->staffPermissions(),
             'customers' => User::where('role', 'customer')->count(),
             'pending_requests' => OrderRequest::whereIn('status', OrderRequest::OPEN_STATUSES)->count(),
+            'new_requests' => OrderRequest::whereIn('status', OrderRequest::OPEN_STATUSES)->whereDoesntHave('orders')->count(),
+            'processing_requests' => OrderRequest::whereIn('status', OrderRequest::OPEN_STATUSES)->whereHas('orders')->count(),
+            'completed_requests' => OrderRequest::whereIn('status', OrderRequest::CLOSED_STATUSES)->count(),
             'confirmed_orders' => Order::whereIn('status', ['confirmed', 'processing'])->count(),
             'pending_withdrawals' => WithdrawalRequest::whereIn('status', ['pending', 'under_review', 'approved'])->count(),
             'completed_orders' => Order::where('status', 'completed')->count(),
@@ -154,9 +157,25 @@ class StaffController extends Controller
     public function requests(Request $request): JsonResponse
     {
         $this->ensurePermission($request->user(), 'manage_requests');
-        $requests = OrderRequest::whereIn('status', OrderRequest::OPEN_STATUSES)
+        $data = $request->validate([
+            'stage' => ['nullable', 'in:new,processing,completed'],
+            'search' => ['nullable', 'string', 'max:120'],
+        ]);
+        $stage = $data['stage'] ?? null;
+        $requests = OrderRequest::query()
+            ->when($stage === 'completed', fn ($query) => $query->whereIn('status', OrderRequest::CLOSED_STATUSES))
+            ->when($stage !== 'completed', fn ($query) => $query->whereIn('status', OrderRequest::OPEN_STATUSES))
+            ->when($stage === 'new', fn ($query) => $query->whereDoesntHave('orders'))
+            ->when($stage === 'processing', fn ($query) => $query->whereHas('orders'))
+            ->when(isset($data['search']), function ($query) use ($data) {
+                $term = '%'.addcslashes($data['search'], '%_\\').'%';
+                $query->where(function ($matching) use ($term) {
+                    $matching->where('reference', 'like', $term)
+                        ->orWhereHas('customer', fn ($customer) => $customer->where('name', 'like', $term)->orWhere('email', 'like', $term));
+                });
+            })
             ->with(['customer:id,name,email', 'items.product:id,title,slug,category,display_price,icon', 'orders:id,order_request_id,reference,status,product_id'])
-            ->latest('submitted_at')->paginate(12);
+            ->latest('submitted_at')->paginate($stage ? 10 : 12);
 
         return response()->json($requests);
     }
@@ -166,6 +185,20 @@ class StaffController extends Controller
         $this->ensurePermission($request->user(), 'manage_requests');
 
         return response()->json(['data' => $orderRequest->load(['customer:id,name,email', 'items.product', 'orders.statusHistory'])]);
+    }
+
+    public function closeRequest(Request $request, OrderRequest $orderRequest): JsonResponse
+    {
+        $this->ensurePermission($request->user(), 'manage_requests');
+        $closed = DB::transaction(function () use ($orderRequest, $request) {
+            $lockedRequest = OrderRequest::query()->lockForUpdate()->findOrFail($orderRequest->id);
+            abort_unless(in_array($lockedRequest->status, OrderRequest::OPEN_STATUSES, true), 422, 'This request is already closed.');
+            $lockedRequest->update(['status' => 'closed_manually', 'reviewed_by' => $request->user()->id]);
+
+            return $lockedRequest->load(['customer:id,name,email', 'items.product', 'orders.statusHistory']);
+        });
+
+        return response()->json(['data' => $closed]);
     }
 
     public function finalize(Request $request, OrderRequest $orderRequest): JsonResponse

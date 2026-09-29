@@ -52,6 +52,7 @@ Route::prefix('v1')->group(function () {
             Route::get('/order-requests', [StaffController::class, 'requests']);
             Route::get('/order-requests/{orderRequest}', [StaffController::class, 'showRequest']);
             Route::post('/order-requests/{orderRequest}/finalize', [StaffController::class, 'finalize']);
+            Route::post('/order-requests/{orderRequest}/close', [StaffController::class, 'closeRequest']);
             Route::get('/orders', [StaffController::class, 'orders']);
             Route::get('/orders/{order}', [StaffController::class, 'showOrder']);
             Route::patch('/orders/{order}/status', [StaffController::class, 'updateStatus']);
