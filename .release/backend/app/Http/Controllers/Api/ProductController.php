@@ -124,10 +124,10 @@ class ProductController extends Controller
 
             foreach ($uploads as $upload) {
                 $path = Storage::disk('public')->putFile('products', $upload);
-                if (!is_string($path)) {
+                if (! is_string($path)) {
                     abort(500, 'The product image could not be stored.');
                 }
-                $imageUrls[] = $request->getSchemeAndHttpHost().'/storage/'.ltrim($path, '/');
+                $imageUrls[] = Storage::disk('public')->url($path);
             }
 
             $data['metadata'] = array_merge(

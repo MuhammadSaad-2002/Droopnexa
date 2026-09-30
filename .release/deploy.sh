@@ -38,6 +38,11 @@ fi
 "$php_bin" artisan migrate --force --no-interaction
 "$php_bin" artisan config:cache --no-interaction
 "$php_bin" artisan route:cache --no-interaction
-if [[ ! -e "$repo/storage" ]]; then ln -s "$private/storage/app/public" "$repo/storage"; fi
+if [[ -L "$repo/storage" && "$(readlink "$repo/storage")" != "$private/storage/app/public" ]]; then
+  rm "$repo/storage"
+fi
+if [[ ! -e "$repo/storage" && ! -L "$repo/storage" ]]; then
+  ln -s "$private/storage/app/public" "$repo/storage"
+fi
 touch "$private/.deployment-ready"
 printf '%s\n' 'DroopNexa deployed with PHP 8.3. No demo users or demo orders were created.'

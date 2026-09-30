@@ -8,6 +8,7 @@ use App\Models\Product;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
@@ -31,7 +32,7 @@ class CategoryController extends Controller
         $this->ensureProductPermission($request);
         $request->validate(['image' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120']]);
         $path = $request->file('image')->store('categories', 'public');
-        $category->update(['image_url' => url('/storage/'.$path)]);
+        $category->update(['image_url' => Storage::disk('public')->url($path)]);
 
         return response()->json(['data' => $category->fresh()->loadCount('products')]);
     }

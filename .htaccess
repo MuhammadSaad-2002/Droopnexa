@@ -19,6 +19,7 @@ RewriteCond %{HTTP:Authorization} .
 RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
 RewriteRule ^sitemap\.xml$ index.php [L,QSA]
 RewriteRule ^api(?:/|$) index.php [L,QSA]
+RewriteRule ^storage/(?:products|categories)/[A-Za-z0-9_-]+\.(?:jpe?g|png|webp)$ index.php [L,QSA,NC]
 RewriteCond %{REQUEST_FILENAME} -f [OR]
 RewriteCond %{REQUEST_FILENAME} -d
 RewriteRule ^ - [L]

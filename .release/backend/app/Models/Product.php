@@ -56,7 +56,8 @@ class Product extends Model
             }
             $host = strtolower((string) parse_url($url, PHP_URL_HOST));
             $path = (string) parse_url($url, PHP_URL_PATH);
-            if (in_array($host, ['localhost', '127.0.0.1', '[::1]'], true) && str_starts_with($path, '/storage/')) {
+            $appHost = strtolower((string) parse_url(config('app.url'), PHP_URL_HOST));
+            if (str_starts_with($path, '/storage/') && (in_array($host, ['localhost', '127.0.0.1', '[::1]'], true) || $host === $appHost)) {
                 return rtrim(config('app.url'), '/').$path;
             }
 
