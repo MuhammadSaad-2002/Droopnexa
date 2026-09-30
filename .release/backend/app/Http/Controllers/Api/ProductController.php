@@ -55,6 +55,7 @@ class ProductController extends Controller
         $this->ensureProductPermission($request);
 
         $data = $this->validatedData($request, true);
+        $data['currency'] ??= 'USD';
         $product = Product::create($data + ['slug' => $this->uniqueSlug($data['title'])]);
 
         return response()->json(['data' => $product], 201);
@@ -92,13 +93,16 @@ class ProductController extends Controller
             'display_price' => ['nullable', 'numeric', 'min:0'],
             'original_price' => ['nullable', 'numeric', 'min:0'],
             'sale_price' => ['nullable', 'numeric', 'min:0'],
-            'currency' => array_merge($creating ? ['required'] : ['sometimes'], ['string', 'size:3']),
+            'currency' => ['sometimes', 'string', 'size:3'],
             'icon' => ['nullable', 'string', 'max:8'],
             'is_active' => ['sometimes', 'boolean'],
             'is_visible' => ['sometimes', 'boolean'],
             'metadata' => ['nullable', 'array'],
             'images' => ['sometimes', 'array', 'max:5'],
             'images.*' => ['file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
+            'sync_images' => ['sometimes', 'boolean'],
+            'retained_images' => ['sometimes', 'array', 'max:5'],
+            'retained_images.*' => ['string', 'max:2048', 'distinct'],
         ]);
 
         $hasOriginalPrice = array_key_exists('original_price', $data);
@@ -115,12 +119,31 @@ class ProductController extends Controller
 
         $uploads = $request->file('images');
         $uploads = is_array($uploads) ? $uploads : ($uploads ? [$uploads] : []);
-        unset($data['images']);
+        $syncImages = (bool) ($data['sync_images'] ?? false);
+        $submittedRetainedImages = $data['retained_images'] ?? [];
+        unset($data['images'], $data['sync_images'], $data['retained_images']);
 
-        if ($uploads !== []) {
+        if ($uploads !== [] || $syncImages) {
             $existingMetadata = is_array($product?->metadata) ? $product->metadata : [];
             $submittedMetadata = is_array($data['metadata'] ?? null) ? $data['metadata'] : [];
-            $imageUrls = [];
+            $existingImages = is_array($existingMetadata['images'] ?? null) && $existingMetadata['images'] !== []
+                ? $existingMetadata['images']
+                : array_filter([$existingMetadata['image_url'] ?? null]);
+            $existingImages = array_values(array_filter($existingImages, 'is_string'));
+
+            if ($syncImages && $product === null) {
+                throw ValidationException::withMessages(['retained_images' => ['Images can only be retained when updating a product.']]);
+            }
+
+            if ($syncImages && array_diff($submittedRetainedImages, $existingImages) !== []) {
+                throw ValidationException::withMessages(['retained_images' => ['Only images already attached to this product can be retained.']]);
+            }
+
+            $retainedImageUrls = $syncImages ? $submittedRetainedImages : $existingImages;
+            $imageUrls = $retainedImageUrls;
+            if (count($imageUrls) + count($uploads) > 5) {
+                throw ValidationException::withMessages(['images' => ['Remove an existing image before uploading another. A product can have up to 5 images.']]);
+            }
 
             foreach ($uploads as $upload) {
                 $path = Storage::disk('public')->putFile('products', $upload);
@@ -134,8 +157,8 @@ class ProductController extends Controller
                 $existingMetadata,
                 $submittedMetadata,
                 [
-                    'source' => 'upload',
-                    'image_url' => $imageUrls[0],
+                    'source' => $imageUrls === [] ? null : ($retainedImageUrls !== [] ? ($existingMetadata['source'] ?? 'upload') : 'upload'),
+                    'image_url' => $imageUrls[0] ?? null,
                     'images' => $imageUrls,
                 ],
             );
