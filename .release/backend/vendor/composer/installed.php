@@ -666,6 +666,15 @@
             'aliases' => array(),
             'dev_requirement' => false,
         ),
+        'pusher/pusher-php-server' => array(
+            'pretty_version' => '7.3.0',
+            'version' => '7.3.0.0',
+            'reference' => '058d8464246118110a341fc2e6e70c7c8b6a7f2c',
+            'type' => 'library',
+            'install_path' => __DIR__ . '/../pusher/pusher-php-server',
+            'aliases' => array(),
+            'dev_requirement' => false,
+        ),
         'ramsey/collection' => array(
             'pretty_version' => '2.1.1',
             'version' => '2.1.1.0',

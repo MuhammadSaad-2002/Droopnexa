@@ -46,3 +46,7 @@ Build source remains in the development workspace. Generate a fresh release with
 ## Production domain configuration
 
 Point `droopnexa.com` to the existing document root, or update the repository path in `.cpanel.yml` if cPanel uses a new directory. In the existing private `.env`, set `APP_URL` and `FRONTEND_URL` to `https://droopnexa.com`, and set `DB_DATABASE` and `DB_USERNAME` to `droopnex_official`. Set the database password privately, then redeploy to refresh configuration caches. Existing private environment files are preserved by deployment.
+
+## Support Center live messages
+
+Create a hosted Pusher Channels app and set `PUSHER_APP_ID`, `PUSHER_APP_KEY`, `PUSHER_APP_SECRET`, and `PUSHER_APP_CLUSTER` in the existing private `.env`. Redeploy to refresh Laravel's configuration cache. The deployment applies the Support Center conversation/message migration automatically. If Pusher is not configured or temporarily unavailable, the chat remains usable and checks for new messages periodically; the page displays its connection state.

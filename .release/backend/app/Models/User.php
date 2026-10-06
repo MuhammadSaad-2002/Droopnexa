@@ -55,6 +55,11 @@ class User extends Authenticatable
         return $this->hasMany(WithdrawalRequest::class, 'customer_id');
     }
 
+    public function supportConversation()
+    {
+        return $this->hasOne(SupportConversation::class, 'customer_id');
+    }
+
     public function isActive(): bool
     {
         return $this->status === 'active';
@@ -97,6 +102,7 @@ class User extends Authenticatable
             'view_profile' => $isStaff,
             'manage_products' => $isAdmin,
             'manage_withdrawals' => $isStaff,
+            'manage_support' => $isStaff,
             'manage_settings' => $isAdmin,
         ];
     }

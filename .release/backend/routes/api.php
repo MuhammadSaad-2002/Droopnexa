@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\OrderRequestController;
 use App\Http\Controllers\Api\ProductController;
 use App\Http\Controllers\Api\SiteContactController;
 use App\Http\Controllers\Api\StaffController;
+use App\Http\Controllers\Api\SupportCenterController;
 use App\Http\Controllers\Api\WithdrawalController;
 use Illuminate\Support\Facades\Route;
 
@@ -30,6 +31,11 @@ Route::prefix('v1')->group(function () {
         Route::patch('/portal/account', [CustomerPortalController::class, 'completeAccount']);
         Route::patch('/portal/password', [CustomerPortalController::class, 'changePassword']);
         Route::get('/portal/orders', [CustomerPortalController::class, 'orders']);
+        Route::get('/portal/support', [SupportCenterController::class, 'customerShow']);
+        Route::post('/portal/support/messages', [SupportCenterController::class, 'customerSend'])->middleware('throttle:30,1');
+        Route::post('/portal/support/read', [SupportCenterController::class, 'customerRead']);
+        Route::get('/portal/support/unread-count', [SupportCenterController::class, 'customerUnread']);
+        Route::post('/support/realtime/auth', [SupportCenterController::class, 'authorizeRealtime'])->middleware('throttle:120,1');
         Route::get('/portal/orders/{order}', [CustomerPortalController::class, 'showOrder']);
         Route::post('/portal/orders/{order}/wallet-payment', [CustomerPortalController::class, 'payWithWallet']);
         Route::get('/withdrawals', [WithdrawalController::class, 'index']);
@@ -38,6 +44,11 @@ Route::prefix('v1')->group(function () {
         Route::get('/withdrawals/{withdrawalRequest}', [WithdrawalController::class, 'show']);
 
         Route::prefix('staff')->group(function () {
+            Route::get('/support', [SupportCenterController::class, 'staffIndex']);
+            Route::get('/support/unread-count', [SupportCenterController::class, 'staffUnread']);
+            Route::get('/support/{conversation}', [SupportCenterController::class, 'staffShow']);
+            Route::post('/support/{conversation}/messages', [SupportCenterController::class, 'staffSend'])->middleware('throttle:30,1');
+            Route::post('/support/{conversation}/read', [SupportCenterController::class, 'staffRead']);
             Route::get('/users', [AdminUserController::class, 'index']);
             Route::post('/users', [AdminUserController::class, 'store']);
             Route::patch('/users/{user}', [AdminUserController::class, 'update']);
