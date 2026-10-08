@@ -46,6 +46,8 @@ Route::prefix('v1')->group(function () {
         Route::prefix('staff')->group(function () {
             Route::get('/support', [SupportCenterController::class, 'staffIndex']);
             Route::get('/support/unread-count', [SupportCenterController::class, 'staffUnread']);
+            Route::get('/support/customers/{customer}', [SupportCenterController::class, 'staffCustomerShow']);
+            Route::post('/support/customers/{customer}/messages', [SupportCenterController::class, 'staffCustomerSend'])->middleware('throttle:30,1');
             Route::get('/support/{conversation}', [SupportCenterController::class, 'staffShow']);
             Route::post('/support/{conversation}/messages', [SupportCenterController::class, 'staffSend'])->middleware('throttle:30,1');
             Route::post('/support/{conversation}/read', [SupportCenterController::class, 'staffRead']);

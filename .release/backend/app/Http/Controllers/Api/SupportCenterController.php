@@ -71,16 +71,35 @@ class SupportCenterController extends Controller
         $this->ensureStaff($request->user());
         $data = $request->validate(['search' => ['sometimes', 'string', 'max:100']]);
         $search = trim($data['search'] ?? '');
+        if ($search !== '') {
+            $page = User::query()->select('id', 'name', 'email')->where('role', 'customer')
+                ->where(fn ($customer) => $customer->where('name', 'like', '%'.$search.'%')
+                    ->orWhere('email', 'like', '%'.$search.'%'))
+                ->with(['supportConversation' => fn ($conversation) => $conversation
+                    ->with('latestMessage.sender:id,name')
+                    ->withCount(['messages as unread_count' => fn ($messages) => $messages
+                        ->where('sender_role', 'customer')
+                        ->whereRaw('support_messages.id > COALESCE(support_conversations.team_last_read_message_id, 0)')])])
+                ->orderBy('name')->orderBy('id')->paginate(20);
+            $page->through(function (User $customer): array {
+                if ($customer->supportConversation) {
+                    return $this->conversationPayload($customer->supportConversation->setRelation('customer', $customer));
+                }
+
+                return [
+                    'id' => null,
+                    'customer' => ['id' => $customer->id, 'name' => $customer->name, 'email' => $customer->email],
+                    'latest_message' => null, 'unread_count' => 0, 'updated_at' => null,
+                ];
+            });
+
+            return response()->json(['data' => $page, 'realtime' => $this->realtime->publicConfiguration()]);
+        }
         $query = SupportConversation::query()
             ->with(['customer:id,name,email', 'latestMessage.sender:id,name'])
             ->withCount(['messages as unread_count' => fn ($query) => $query
                 ->where('sender_role', 'customer')
                 ->whereRaw('support_messages.id > COALESCE(support_conversations.team_last_read_message_id, 0)')]);
-        if ($search !== '') {
-            $query->whereHas('customer', fn ($customer) => $customer
-                ->where('name', 'like', '%'.$search.'%')
-                ->orWhere('email', 'like', '%'.$search.'%'));
-        }
         $page = $query->orderByDesc('updated_at')->orderByDesc('id')->paginate(20);
         $page->through(fn (SupportConversation $conversation) => $this->conversationPayload($conversation));
 
@@ -104,6 +123,41 @@ class SupportCenterController extends Controller
         $this->ensureStaff($request->user());
 
         return response()->json(['data' => $this->detail($request, $conversation, true), 'realtime' => $this->realtime->publicConfiguration()]);
+    }
+
+    public function staffCustomerShow(Request $request, User $customer): JsonResponse
+    {
+        $this->ensureStaff($request->user());
+        abort_unless($customer->role === 'customer', 404);
+        $conversation = SupportConversation::where('customer_id', $customer->id)->first();
+
+        return response()->json([
+            'data' => $conversation ? $this->detail($request, $conversation, true) : [
+                'conversation' => null, 'messages' => [], 'has_more' => false,
+            ],
+            'realtime' => $this->realtime->publicConfiguration(),
+        ]);
+    }
+
+    public function staffCustomerSend(Request $request, User $customer): JsonResponse
+    {
+        $this->ensureStaff($request->user());
+        abort_unless($customer->role === 'customer', 404);
+        $body = $this->validatedBody($request);
+        $message = DB::transaction(function () use ($customer, $request, $body): SupportMessage {
+            User::whereKey($customer->id)->where('role', 'customer')->lockForUpdate()->firstOrFail();
+            $conversation = SupportConversation::firstOrCreate(['customer_id' => $customer->id]);
+            $locked = SupportConversation::whereKey($conversation->id)->lockForUpdate()->firstOrFail();
+            $message = $locked->messages()->create([
+                'sender_id' => $request->user()->id, 'sender_role' => 'team', 'body' => $body,
+            ]);
+            $locked->touch();
+
+            return $message;
+        });
+        $this->realtime->signal($message->support_conversation_id, $customer->id);
+
+        return response()->json(['data' => $this->messagePayload($message->load('sender'))], 201);
     }
 
     public function staffSend(Request $request, SupportConversation $conversation): JsonResponse
