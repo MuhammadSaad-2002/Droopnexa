@@ -11,6 +11,18 @@ DirectoryIndex index.html
 </IfModule>
 
 RewriteEngine On
+# Temporary public lock: remove/rename .site-unavailable in the document root to reopen.
+# Keep this block before every normal routing rule; it also covers static files and APIs.
+<If "-f '%{DOCUMENT_ROOT}/.site-unavailable'">
+    ErrorDocument 403 /index.html
+    ErrorDocument 503 "503 Service Unavailable"
+    <IfModule mod_headers.c>
+        Header always set Cache-Control "no-store, max-age=0"
+    </IfModule>
+</If>
+RewriteCond %{DOCUMENT_ROOT}/.site-unavailable -f
+RewriteRule ^ - [R=503,L]
+
 # Never expose Git metadata, release sources, environment files, or uploaded scripts.
 RewriteRule (^|/)\.(?!well-known(?:/|$)) - [R=404,L]
 RewriteRule ^storage/.*\.(php[0-9]*|phtml|phar|cgi|pl|sh)(/|$) - [R=404,L,NC]
